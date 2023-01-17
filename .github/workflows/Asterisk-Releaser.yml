@@ -1,0 +1,125 @@
+name: Asterisk Releaser
+run-name: ${{ github.actor }} is creating an Asterisk release
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Asterisk Branch to cut the release from'
+        required: true
+        type: choice
+        options:
+        - 20
+        - 18
+        - certified/18.9
+        - master
+      release_type:
+        description: "Next release type"
+        type: choice
+        options:
+        - 'New minor version - first RC (MINOR/RC)'
+        - 'New minor version - subsequent RC (NONE/RC)'
+        - 'New minor version - last RC -> GA (NONE/REMOVE)'
+        - 'New patch/security version - No RCs (PATCH/NONE)'
+        - 'New major version - first RC -> RC (MAJOR/RC)'
+        - 'New major version - subsequent RC (NONE/RC)'
+        - 'New major version - last RC -> GA (NONE/REMOVE)'
+      
+jobs:
+  CreateRelease:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup
+        run: |
+          [[ "${{ inputs.release_type }}" =~ [^\(]+\((MAJOR|MINOR|PATCH|NONE)/(RC|REMOVE|NONE)\) ]] || {
+            echo "::error::Release type '${{ inputs.release_type }}' not valid"
+            exit 1
+          }
+          echo "version_fragment=${BASH_REMATCH[1]}" >> $GITHUB_ENV
+          echo "prerelease_fragment=${BASH_REMATCH[2]}" >> $GITHUB_ENV
+          echo "::notice::version_fragment: ${BASH_REMATCH[1]} prerelease_fragment: ${BASH_REMATCH[2]}"
+          git config --global user.email "asteriskteam@digium.com"
+          git config --global user.name "Asterisk Development Team"
+          last_version=$(gh api repos/${OWNER}/${REPO}/git/matching-refs/tags/$BRANCH -q '.[-1].ref[10:]')
+          echo "last_version=$last_version" >> $GITHUB_ENV
+          echo "::notice::Last version: $last_version"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+          BRANCH: ${{ inputs.branch }}
+
+      - id: bump_version 
+        name: Bump Version
+        uses: cookbenjamin/update-version@v1.0.1
+        with:
+          current-version: "${{ env.last_version }}"
+          increment-version-fragment: "${{ env.version_fragment }}"
+          prerelease-fragment: "${{ env.prerelease_fragment }}"
+
+      - name: Checkout Asterisk CI
+        uses: actions/checkout@v3
+        with:
+          repository: 'asterisk/asterisk-ci'
+          ref: main
+          # Relative path under $GITHUB_WORKSPACE to place the repository
+          path: 'asterisk-ci'
+          # Whether to execute `git clean -ffdx && git reset --hard HEAD` before fetching
+          # Default: true
+          clean: true
+          fetch-depth: 1
+          # Add repository path as safe.directory for Git global config by running `git
+          # config --global --add safe.directory <path>`
+          # Default: true
+          set-safe-directory: true
+
+      - name: Checkout Asterisk
+        uses: actions/checkout@v3
+        with:
+          repository: 'asterisk/asterisk'
+          ref: ${{ inputs.branch }}
+          # Relative path under $GITHUB_WORKSPACE to place the repository
+          path: 'asterisk'
+          # Whether to execute `git clean -ffdx && git reset --hard HEAD` before fetching
+          # Default: true
+          clean: true
+          fetch-depth: 1
+          # Add repository path as safe.directory for Git global config by running `git
+          # config --global --add safe.directory <path>`
+          # Default: true
+          set-safe-directory: true
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Alembic
+        run: |
+          echo "::notice::Installing Alembic"
+          pip install alembic
+
+      - name: Import GPG key
+        id: import_gpg
+        uses: crazy-max/ghaction-import-gpg@v5
+        with:
+          gpg_private_key: ${{ secrets.ASTDEV_GPG_PRIV_KEY }}
+          
+      - name: Create release artifacts
+        run: |
+          echo "::notice::Creating Release Artifacts"
+          ./asterisk-ci/scripts/create_release_artifacts.sh \
+            --start-tag=${last_version} --end-tag=${new_version} \
+            --src-repo=./asterisk --dst-dir=./staging \
+            --full-monty
+        env:
+          new_version: "${{ steps.bump_version.outputs.updated-version }}"
+
+      - name: Publish release
+        run: |
+          echo "::notice::Publishing Release"
+          echo "TODO"
+          echo "Create GitHub Release"
+          echo "Push artifacts to final destination"
+          echo "Send notification emails"
+        env:
+          new_version: "${{ steps.bump_version.outputs.updated-version }}"
