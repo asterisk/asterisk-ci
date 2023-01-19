@@ -1,10 +1,12 @@
 #!/bin/bash
 set -e
 
-declare needs=( start_tag end_tag )
-declare wants=( src_repo dst_dir alembic changelog commit tag push \
-				tarball patchfile close_issues sign full_monty help dry_run )
-declare -A tests=( [start_tag]=1 [end_tag]=1 [src_repo]=1 [dst_dir]=1 )
+declare needs=( version_type release_type branch )
+declare wants=( src_repo dst_dir certified security alembic
+				changelog commit tag push tarball patchfile
+				close_issues sign full_monty dry_run )
+declare tests=( version_type release_type branch
+			start_tag end_tag src_repo dst_dir )
 
 progdir="$(dirname $(realpath $0) )"
 source "${progdir}/common.sh"

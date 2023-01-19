@@ -1,8 +1,8 @@
 #!/bin/bash
 
 declare needs=( start_tag end_tag )
-declare wants=( src_repo dst_dir sign help dry_run )
-declare -A tests=( [start_tag]=1 [end_tag]=1 src_repo]=1 [dst_dir]=1 )
+declare wants=( src_repo dst_dir sign dry_run )
+declare tests=( start_tag end_tag src_repo dst_dir )
 
 progdir="$(dirname $(realpath $0) )"
 source "${progdir}/common.sh"

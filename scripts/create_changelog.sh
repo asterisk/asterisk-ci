@@ -2,8 +2,8 @@
 set -e
 
 declare needs=( start_tag end_tag )
-declare wants=( src_repo dst_dir help )
-declare -A tests=( [start_tag]=1 [src_repo]=1 [dst_dir]=1 )
+declare wants=( src_repo dst_dir )
+declare tests=( start_tag src_repo dst_dir )
 
 # Since creating the changelog doesn't make any
 # changes, we're not bothering with dry-run.

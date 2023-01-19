@@ -2,8 +2,8 @@
 set -e
 
 declare needs=( end_tag )
-declare wants=( src_repo commit help dry_run )
-declare -A tests=( [src_repo]=1 )
+declare wants=( src_repo commit dry_run )
+declare tests=( src_repo )
 
 progdir="$(dirname $(realpath $0) )"
 source "${progdir}/common.sh"

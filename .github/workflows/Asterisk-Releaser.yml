@@ -39,20 +39,20 @@ jobs:
           echo "::notice::version_fragment: ${BASH_REMATCH[1]} prerelease_fragment: ${BASH_REMATCH[2]}"
           git config --global user.email "asteriskteam@digium.com"
           git config --global user.name "Asterisk Development Team"
-          last_version=$(gh api repos/${OWNER}/${REPO}/git/matching-refs/tags/$BRANCH -q '.[-1].ref[10:]')
+          last_tag=$(gh api repos/${{ vars.ASTERISK_REPO }}/git/matching-refs/tags/$BRANCH -q '.[-1].ref[10:]')
+          echo "last_tag=$last_tag" >> $GITHUB_ENV
+          last_version=$(gh api repos/${{ vars.ASTERISK_REPO }}/git/matching-refs/tags/$BRANCH -q '[ .[].ref[10:] ]| map(select(contains("rc") == false))[-1]')
           echo "last_version=$last_version" >> $GITHUB_ENV
-          echo "::notice::Last version: $last_version"
+          echo "::notice::Last version: $last_version  Last tag: $last_tag"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OWNER: ${{ github.repository_owner }}
-          REPO: ${{ github.event.repository.name }}
           BRANCH: ${{ inputs.branch }}
 
       - id: bump_version 
         name: Bump Version
         uses: cookbenjamin/update-version@v1.0.1
         with:
-          current-version: "${{ env.last_version }}"
+          current-version: "${{ env.last_tag }}"
           increment-version-fragment: "${{ env.version_fragment }}"
           prerelease-fragment: "${{ env.prerelease_fragment }}"
 
