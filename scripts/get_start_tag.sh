@@ -1,12 +1,22 @@
 #!/bin/bash
 
+declare -A options=(
+	[gh_action_format]="--gh-action-format                 # Prepends the ::set-output tag"
+)
+GH_ACTION_FORMAT=false
+TAG_OUTPUT_PREFIX=
+
 declare needs=( end_tag )
-declare wants=( start_tag src_repo )
+declare wants=( start_tag src_repo security norc gh_action_format)
 declare tests=( src_repo )
 
 progname=$(realpath "$0")
 progdir=$(dirname "$progname")
 source "${progdir}/common.sh"
+
+if ${GH_ACTION_FORMAT} ; then
+	TAG_OUTPUT_PREFIX="::set-output name=start-tag::"
+fi
 
 declare -A last
 declare -A new
@@ -61,8 +71,7 @@ if [ "${new[minor]}" != "${last[minor]}" ] ; then
 		bail "(${last[tag]} -> ${new[tag]}): This seems to be a new minor
 			version but the new release type/num isn't 'rc1'."
 	fi
-	echo ::set-output name=last-version::"${last[tag]}"
-	echo ::set-output name=new-version::"${new[tag]}"
+	echo "${TAG_OUTPUT_PREFIX}${last[tag]}"
 	exit 0
 fi
 
@@ -96,8 +105,7 @@ if [ "${new[patch]}" != "${last[patch]}" ] ; then
 		bail "(${last[tag]} -> ${new[tag]}): This seems to be a new patch
 			version but the new release type/num isn't 'rc1'."
 	fi
-	echo ::set-output name=last-version::"${last[tag]}"
-	echo ::set-output name=new-version::"${new[tag]}"
+	echo "${TAG_OUTPUT_PREFIX}${last[tag]}"
 	exit 0
 fi
 
@@ -122,8 +130,7 @@ if [ "${new[release_type]}" == "rc" ] ; then
 		# it's brobably NOT branch_num - 1.
 		last_branch=$(git -C "${SRC_REPO}" for-each-ref --sort="v:refname" --format="%(refname:lstrip=3)" refs/heads/Releases/${new[certprefix]} | tail -2 | head -1)
 		lastga=$(git -C "${SRC_REPO}" tag --sort="v:refname" -l "${last_branch}.[0-9]*${new[patchsep]}[0-9]" | tail -1)
-		echo ::set-output name=last-version::"$lastga"
-		echo ::set-output name=new-version::"${new[tag]}"
+		echo "${TAG_OUTPUT_PREFIX}$lastga"
 		exit 0
 	fi
 	if [ "${new[release_num]}" != "$(( last[release_num] + 1))" ] ; then 
@@ -131,10 +138,8 @@ if [ "${new[release_type]}" == "rc" ] ; then
 			${new[release_num]} but the last rc version was
 			${last[release_num]}. You can't skip or go back."
 	fi
-		
-	
-	echo ::set-output name=last-version::"${last[tag]}"
-	echo ::set-output name=new-version::"${new[tag]}"
+
+	echo "${TAG_OUTPUT_PREFIX}${last[tag]}"
 	exit 0
 fi
 
@@ -142,7 +147,6 @@ fi
 # We need to find the previous GA release tag
 
 lastga=$(git -C "${SRC_REPO}" tag --sort="v:refname" -l "${new[branch]}.[0-9]*${new[patchsep]}[0-9]" | tail -1)
-echo ::set-output name=last-version::"${lastga}"
-echo ::set-output name=new-version::"${new[tag]}"
+echo "${TAG_OUTPUT_PREFIX}${lastga}"
 
 exit 0

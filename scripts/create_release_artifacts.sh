@@ -1,15 +1,22 @@
 #!/bin/bash
 set -e
 
-declare needs=( version_type release_type branch )
-declare wants=( src_repo dst_dir certified security alembic
+declare needs=( end_tag )
+declare wants=( src_repo dst_dir security norc alembic
 				changelog commit tag push tarball patchfile
 				close_issues sign full_monty dry_run )
-declare tests=( version_type release_type branch
-			start_tag end_tag src_repo dst_dir )
+declare tests=( src_repo dst_dir )
 
 progdir="$(dirname $(realpath $0) )"
 source "${progdir}/common.sh"
+
+declare -A end_tag
+tag_parser ${END_TAG} end_tag || bail "Unable to parse end tag '${END_TAG}'"
+${DEBUG} && declare -p end_tag
+
+START_TAG=$($progdir/get_start_tag.sh \
+	--end-tag=${END_TAG} --src-repo=${SRC_REPO} \
+	${SECURITY:+--security} ${NORC:+--NORC} )
 
 if ${CHANGELOG} ; then
 	echo "${END_TAG}" > ${DST_DIR}/.version
@@ -23,7 +30,7 @@ if ${CHANGELOG} ; then
 	if ${COMMIT} ; then
 		$ECHO_CMD cp ${DST_DIR}/.version ${SRC_REPO}/.version
 		$ECHO_CMD cp ${DST_DIR}/ChangeLog-${END_TAG}.txt ${SRC_REPO}/ChangeLogs/
-q		$ECHO_CMD git -C ${SRC_REPO} add .version ChangeLogs/ChangeLog-${END_TAG}.txt
+		$ECHO_CMD git -C ${SRC_REPO} add .version ChangeLogs/ChangeLog-${END_TAG}.txt
 		$ECHO_CMD git -C ${SRC_REPO} commit -a -m "Add ChangeLog for release ${END_TAG}"
 	fi
 fi
