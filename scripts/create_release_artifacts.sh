@@ -14,11 +14,17 @@ declare -A end_tag
 tag_parser ${END_TAG} end_tag || bail "Unable to parse end tag '${END_TAG}'"
 ${DEBUG} && declare -p end_tag
 
-START_TAG=$($progdir/get_start_tag.sh \
-	--end-tag=${END_TAG} --src-repo=${SRC_REPO} \
-	${SECURITY:+--security} ${NORC:+--NORC} )
+if [ -z "${START_TAG}" ] ; then
+	START_TAG=$($progdir/get_start_tag.sh \
+		--end-tag=${END_TAG} --src-repo=${SRC_REPO} \
+		${SECURITY:+--security} ${NORC:+--NORC} )
+fi
+if [ -z "${START_TAG}" ] ; then
+	bail "can't determine a start tag"
+fi		
 
 if ${CHANGELOG} ; then
+	debug "Creating ChangeLog for ${START_TAG} -> ${END_TAG}"
 	echo "${END_TAG}" > ${DST_DIR}/.version
 	$ECHO_CMD $progdir/create_changelog.sh --start-tag=${START_TAG} --end-tag=${END_TAG} \
 		--src-repo=${SRC_REPO} --dst-dir=${DST_DIR}
@@ -36,6 +42,8 @@ if ${CHANGELOG} ; then
 fi
 
 if ${TAG} ; then
+	${COMMIT} || bail "There was no commit so there's nothing to tag"
+	debug "Creating tag for ${END_TAG}"
 	$ECHO_CMD git -C ${SRC_REPO} tag -a ${END_TAG} -m ${END_TAG}
 	if ${PUSH} ; then
 		$ECHO_CMD git -C ${SRC_REPO} push
@@ -53,7 +61,7 @@ if ${PATCHFILE} ; then
 	--src-repo=${SRC_REPO} --dst-dir=${DST_DIR} ${SIGN:+--sign}
 fi
 
-if ${CLOSE_ISSUES} ; then
+if ${LABEL_ISSUES} ; then
 	$ECHO_CMD $progdir/close_issues.sh --start-tag=${START_TAG} --end-tag=${END_TAG} \
 		--src-repo=${SRC_REPO} --dst-dir=${DST_DIR}
 fi

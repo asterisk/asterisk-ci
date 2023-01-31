@@ -29,12 +29,14 @@ EOF
 # that don't include any commit with a subject that starts
 # ChangeLog.  This way we don't include the changelog from
 # the previous release.
+debug "Getting commit list for ${START_TAG}..HEAD"
 git -C "${SRC_REPO}" --no-pager log \
 	--format='format:@#@#@#@%nSubject: %s%nAuthor: %cn%nDate:   %as%n%n%b%n#@#@#@#' \
-	--grep "^ChangeLog" --invert-grep ${START_TAG}..HEAD >"${TMPFILE2}"
+	--grep "^Add ChangeLog" --invert-grep ${START_TAG}..HEAD >"${TMPFILE2}"
 
 # For the summary, we want only the commit
 # subject plus any Upgrade or User notes.
+debug "Creating summary"
 sed -r -e '/^$/d' "${TMPFILE2}" |\
 	sed -n -r -e "s/^Subject:\s+(.+)/- \1/p" \
 	-e '/^(Upgrade|User)Note:/,/((Upgrade|User)Note:)||(^[-])/!d ; s/(.)/    \1/p' \
@@ -51,24 +53,31 @@ EOF
 # number.  We're going to list the issues here but also
 # save them to 'issues_to_close.txt' so we can close them
 # later without having to pull them all again.
+debug "Getting issues list"
 issuelist=( $(sed -n -r -e "s/^\s*Fixes:\s*#([0-9]+)/\1/gp" "${TMPFILE2}") )
 echo "${issuelist[*]}" > "${DST_DIR}/issues_to_close.txt"
+debug "Issues found: ${#issuelist[*]}"
 
-# The issues in issuelist are separated by newlines
-# but we want them seaprated by commas for the jq query
-# so we set IFS=, to make ${issuelist[*]} print them
-# that way. 
-IFS=,
-# We want the issue number and the title formatted like:
-#   - #2: Issue Title
-# which GitHub can do for us using a jq format string. 
-gh --repo=asterisk/$(basename ${SRC_REPO}) issue list \
-	--json number,title \
-	--jq "[ .[] | select(.number|IN(${issuelist[*]}))] | sort_by(.number) | .[] | \"  - #\" + ( .number | tostring) + \": \" + .title" \
-	>>"${TMPFILE1}"
-# Reset IFS back to its normal special value
-unset IFS
-
+if [ ${#issuelist[*]} -gt 0 ] ; then
+	debug "Getting issue titles from GitHub"
+	# The issues in issuelist are separated by newlines
+	# but we want them seaprated by commas for the jq query
+	# so we set IFS=, to make ${issuelist[*]} print them
+	# that way. 
+	IFS=,
+	# We want the issue number and the title formatted like:
+	#   - #2: Issue Title
+	# which GitHub can do for us using a jq format string.
+	gh --repo=asterisk/$(basename ${SRC_REPO}) issue list \
+		--json number,title \
+		--jq "[ .[] | select(.number|IN(${issuelist[*]}))] | sort_by(.number) | .[] | \"  - #\" + ( .number | tostring) + \": \" + .title" \
+		>>"${TMPFILE1}"
+	# Reset IFS back to its normal special value
+	unset IFS
+else
+	debug "No issues"
+	echo "None" >> "${TMPFILE1}"
+fi
 cat <<-EOF >>"${TMPFILE1}"
 
 Commits By Author:
@@ -78,6 +87,7 @@ EOF
 
 # git shortlog can give us a list of commit authors
 # and the number of commits in the tag range.
+debug "Getting shortlog for authors"
 git -C "${SRC_REPO}" shortlog --group="format:- %an" --format="- %s" ${START_TAG}..HEAD |\
 	sed -r -e "s/^\s+/    /g" >>"${TMPFILE1}"
 
@@ -87,7 +97,7 @@ Detail:
 ------------------
 
 EOF
-
+debug "Adding the details"
 # Clean up the tags we added to make parsing easier.
 sed -r -e "s/^(.)/  \1/g" \
 	-e '/@#@#@#@/,/Subject:/p ; s/^  Subject:\s+([^ ].+)/- \1/g' \
@@ -95,3 +105,4 @@ sed -r -e "s/^(.)/  \1/g" \
 	 sed -r -e '/#@#@#@#|@#@#@#@|Subject:/d' >> "${TMPFILE1}"
 
 cp "${TMPFILE1}" "${DST_DIR}/ChangeLog-${END_TAG}.txt"
+debug "Done"

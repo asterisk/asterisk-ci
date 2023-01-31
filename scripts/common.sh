@@ -36,7 +36,7 @@ options+=(
 	        [push]="--push            # Push commit and tag upstream"
 	     [tarball]="--tarball         # Create tarball"
 	   [patchfile]="--patchfile       # Create patchfile"
-	[close_issues]="--close-issues    # Close related issues"
+	[label_issues]="--label-issues    # Label related issues with release tag"
 	        [sign]="--sign            # Sign the tarball and patchfile"
 	  [full_monty]="--full-monty      # Do everything"
 	        [help]="--help"
@@ -52,6 +52,12 @@ bail() {
 	# Join lines that start with whitespace.
 	sed -E ':a ; $!N ; s/\n\s+/ / ; ta ; P ; D' <<<"$@" >&2
 	exit 1
+}
+
+debug() {
+	# Join lines that start with whitespace.
+	${DEBUG} && sed -E ':a ; $!N ; s/\n\s+/ / ; ta ; P ; D' <<<"$@" >&2
+	return 0
 }
 
 print_help() {
@@ -86,7 +92,7 @@ TAG=false
 PUSH=false
 TARBALL=false
 PATCHFILE=false
-CLOSE_ISSUES=false
+LABEL_ISSUES=false
 SIGN=false
 FULL_MONTY=false
 HELP=false
@@ -114,7 +120,7 @@ for a in "$@" ; do
 			TARBALL=true
 			PATCHFILE=true
 			SIGN=true
-			CLOSE_ISSUES=true
+			LABEL_ISSUES=true
 		}
 	else
 		args+=( "$a" )

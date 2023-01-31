@@ -32,9 +32,10 @@ tag_parser ${START_TAG} last || bail "Unable to parse start tag '${START_TAG}'"
 ${DEBUG} && declare -p last
 
 if [ "${new[tag]}" == "${last[tag]}" ] ; then
-	bail "(${last[tag]} -> ${new[tag]}): The end tag you specified \
+	bail "(${last[tag]} -> ${new[tag]}): The end tag you specified
 		is the same as the last tag in the repo."
 fi
+debug "good: Tags aren't the same"
 
 if [ "${last[branch]}" != "${new[branch]}" ] ; then
 	bail "(${last[tag]} -> ${new[tag]}): The last tag in branch '${new[branch]}'
@@ -43,8 +44,11 @@ if [ "${last[branch]}" != "${new[branch]}" ] ; then
 			'${new[branch]}.${new[minor]}${new[patchsep]}${new[startpatch]}-pre1'
 			tag."
 fi
+debug "good: Branches are the same: ${new[branch]}"
 
 if [ "${new[minor]}" != "${last[minor]}" ] ; then
+	debug "good: A new minor: ${last[minor]} -> ${new[minor]}"
+
 	if [ "${new[release_type]}" != "rc" ] &&
 		[ "${new[release_num]}" != "1" ] ; then
 		bail "(${last[tag]} -> ${new[tag]}): You can't go to a new minor
@@ -75,6 +79,8 @@ if [ "${new[minor]}" != "${last[minor]}" ] ; then
 	exit 0
 fi
 
+debug "good: Possibly rc->ga, rcn->rcn+1, patch, -pre1 -> rc1"
+
 # At this point, major and minor are the same
 # so this can only be a transition from...
 #   1.  A release candidate to either another
@@ -84,6 +90,8 @@ fi
  
 
 if [ "${new[patch]}" != "${last[patch]}" ] ; then
+	debug "good: New patch: ${last[patch]} -> ${new[patch]}"
+
 	if [ "${new[patch]}" != "$(( last[patch] + 1))" ] ; then 
 		bail "(${last[tag]} -> ${new[tag]}): The new patch version is
 			${new[patch]} but the last patch version was ${last[patch]}.
@@ -109,6 +117,8 @@ if [ "${new[patch]}" != "${last[patch]}" ] ; then
 	exit 0
 fi
 
+debug "good: Possibly rc->ga, rcn->rcn+1, -pre1 -> rc1"
+
 # At this point, major, minor and patch are the same
 # so we can only be...
 # 1. Going from -pre1 to -rc1
@@ -121,7 +131,9 @@ if [ "${last[release_type]}" == "ga" ] ; then
 fi
 
 if [ "${new[release_type]}" == "rc" ] ; then
+	debug "good: Possibly rcn->rcn+1, -pre1 -> rc1"
 	if [ "${last[release_type]}" == "pre" ] ; then
+		debug "good: -pre1 -> rc1"
 		if [ "${new[release]}" != "-rc1" ] ; then 
 			bail "(${last[tag]} -> ${new[tag]}): The last release type was
 				'${last[release_type]}' so the new release must be '-rc1'."
@@ -133,6 +145,7 @@ if [ "${new[release_type]}" == "rc" ] ; then
 		echo "${TAG_OUTPUT_PREFIX}$lastga"
 		exit 0
 	fi
+	debug "good: rcn->rcn+1"
 	if [ "${new[release_num]}" != "$(( last[release_num] + 1))" ] ; then 
 		bail "(${last[tag]} -> ${new[tag]}): The new rc version is
 			${new[release_num]} but the last rc version was
@@ -145,8 +158,9 @@ fi
 
 # It's RC to GA
 # We need to find the previous GA release tag
+debug "good: rcn->ga"
 
-lastga=$(git -C "${SRC_REPO}" tag --sort="v:refname" -l "${new[branch]}.[0-9]*${new[patchsep]}[0-9]" | tail -1)
+lastga=$(git -C "${SRC_REPO}" tag --sort="v:refname" -l "${new[major]}.[0-9]*${new[patchsep]}[0-9]" | tail -1)
 echo "${TAG_OUTPUT_PREFIX}${lastga}"
 
 exit 0
