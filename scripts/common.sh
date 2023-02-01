@@ -1,3 +1,11 @@
+
+if [ "$0" == "${BASH_SOURCE[0]}" ] ; then
+	echo "${BASH_SOURCE[0]} is meant to be 'sourced' not run directly" >&2
+	exit 1
+fi
+
+progname=$(basename -s .sh $0)
+
 # Scripts can use this common arg parsing like so...
 # Create 3 arrays that describe the options being used:
 #
@@ -14,7 +22,6 @@
 # source "${progdir}/common.sh"
 
 
-
 # Not all the scripts use all the options
 # but it'seasier to just define them all here.
 [[ "$(declare -p options 2>/dev/null || : )" =~ "declare -A" ]] || declare -A options
@@ -29,15 +36,17 @@ options+=(
 	      [branch]="--branch=<branch> # Release branch"
 	        [norc]="--norc            # There were no release candidates for this release"
 	    [security]="--security        # This is a security release"
+	 [cherry_pick]="--cherry-pick     # Cherry-pick commits for rc1 releases"
 	     [alembic]="--alembic         # Create alembic sql scripts"
 	   [changelog]="--changelog       # Create changelog"
 	      [commit]="--commit          # Commit changelog/alembic scripts"
 	         [tag]="--tag             # Tag the release"
-	        [push]="--push            # Push commit and tag upstream"
+	        [push]="--push            # Push ChangeLog commit and tag upstream"
 	     [tarball]="--tarball         # Create tarball"
 	   [patchfile]="--patchfile       # Create patchfile"
-	[label_issues]="--label-issues    # Label related issues with release tag"
 	        [sign]="--sign            # Sign the tarball and patchfile"
+	[label_issues]="--label-issues    # Label related issues with release tag"
+	   [push_live]="--push-live       # Create and publish GitHub release"
 	  [full_monty]="--full-monty      # Do everything"
 	        [help]="--help"
 	     [dry_run]="--dry-run         # Don't do anything, just print commands"
@@ -50,14 +59,19 @@ tests+=( )
 
 bail() {
 	# Join lines that start with whitespace.
-	sed -E ':a ; $!N ; s/\n\s+/ / ; ta ; P ; D' <<<"$@" >&2
+	sed -E ':a ; $!N ; s/\n\s+/ / ; ta ; P ; D' <<<"${progname}: $@" >&2
 	exit 1
 }
 
 debug() {
 	# Join lines that start with whitespace.
-	${DEBUG} && sed -E ':a ; $!N ; s/\n\s+/ / ; ta ; P ; D' <<<"$@" >&2
+	${DEBUG} && sed -E ':a ; $!N ; s/\n\s+/ / ; ta ; P ; D' <<<"${progname}: $@" >&2
 	return 0
+}
+
+booloption() {
+	declare -n option=${1^^}
+	${option} && echo "--${1}"
 }
 
 print_help() {
@@ -85,6 +99,7 @@ DST_DIR=../staging
 BRANCH=
 NORC=false
 SECURITY=false
+CHERRY_PICK=false
 ALEMBIC=false
 CHANGELOG=false
 COMMIT=false
@@ -92,8 +107,9 @@ TAG=false
 PUSH=false
 TARBALL=false
 PATCHFILE=false
-LABEL_ISSUES=false
 SIGN=false
+LABEL_ISSUES=false
+PUSH_LIVE=false
 FULL_MONTY=false
 HELP=false
 DRY_RUN=false
@@ -112,6 +128,7 @@ for a in "$@" ; do
 		var=${BASH_REMATCH[1]//-/_}
 		eval "${var^^}"="true"
 		${FULL_MONTY} && {
+			CHERRY_PICK=true
 			ALEMBIC=true
 			CHANGELOG=true
 			COMMIT=true
@@ -121,16 +138,19 @@ for a in "$@" ; do
 			PATCHFILE=true
 			SIGN=true
 			LABEL_ISSUES=true
+			PUSH_LIVE=true
 		}
 	else
 		args+=( "$a" )
 	fi
 done
 
+debug "$@"
+
 $HELP && print_help
 
-[ -n "${SRC_REPO}" ] && SRC_REPO="$(realpath ${SRC_REPO})"
-[ -n "${DST_DIR}" ] && DST_DIR="$(realpath ${DST_DIR})"
+[ -n "${SRC_REPO}" ] && SRC_REPO=$(realpath "${SRC_REPO}")
+[ -n "${DST_DIR}" ] && DST_DIR=$(realpath "${DST_DIR}")
 
 for opt in "${needs[@]}" ; do
 	declare -n var=${opt^^}
@@ -204,6 +224,7 @@ tag_parser() {
 		return 1
 	fi
 	tagarray[branch]="Releases/${tagarray[certprefix]}${tagarray[major]}"
+	tagarray[source_branch]="${tagarray[certprefix]}${tagarray[major]}"
 	${tagarray[certified]} && tagarray[startpatch]=1 || tagarray[startpatch]=0
 	tagarray[tag]=$tagin
 	return 0

@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 declare -A options=(
 	[gh_action_format]="--gh-action-format                 # Prepends the ::set-output tag"
 )
@@ -10,8 +12,7 @@ declare needs=( end_tag )
 declare wants=( start_tag src_repo security norc gh_action_format)
 declare tests=( src_repo )
 
-progname=$(realpath "$0")
-progdir=$(dirname "$progname")
+progdir="$(dirname $(realpath $0) )"
 source "${progdir}/common.sh"
 
 if ${GH_ACTION_FORMAT} ; then
@@ -162,5 +163,5 @@ debug "good: rcn->ga"
 
 lastga=$(git -C "${SRC_REPO}" tag --sort="v:refname" -l "${new[major]}.[0-9]*${new[patchsep]}[0-9]" | tail -1)
 echo "${TAG_OUTPUT_PREFIX}${lastga}"
-
+debug "Done"
 exit 0

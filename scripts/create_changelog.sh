@@ -16,6 +16,23 @@ TMPFILE1=/tmp/asterisk/ChangeLog-${END_TAG}.tmp1.txt
 TMPFILE2=/tmp/asterisk/ChangeLog-${END_TAG}.tmp2.txt
 trap "rm -f $TMPFILE1 $TMPFILE2" EXIT
 
+
+# This gets a somewhat machine readable list of commits
+# that don't include any commit with a subject that starts
+# ChangeLog.  This way we don't include the changelog from
+# the previous release.
+debug "Getting commit list for ${START_TAG}..HEAD"
+git -C "${SRC_REPO}" --no-pager log \
+	--format='format:@#@#@#@%nSubject: %s%nAuthor: %an%nDate:   %as%n%n%b%n#@#@#@#' \
+	--grep "^Add ChangeLog" --invert-grep ${START_TAG}..HEAD >"${TMPFILE2}"
+
+if [ ! -s "${TMPFILE2}" ] ; then
+	bail "There are no commits in the range ${START_TAG}..HEAD.
+	Do you need to cherry pick?"
+fi
+
+
+
 cat <<-EOF >"${TMPFILE1}"
 Change Log for Release ${END_TAG}
 =================================
@@ -24,15 +41,6 @@ Summary:
 --------
 
 EOF
-
-# This gets a somewhat machine readable list of commits
-# that don't include any commit with a subject that starts
-# ChangeLog.  This way we don't include the changelog from
-# the previous release.
-debug "Getting commit list for ${START_TAG}..HEAD"
-git -C "${SRC_REPO}" --no-pager log \
-	--format='format:@#@#@#@%nSubject: %s%nAuthor: %cn%nDate:   %as%n%n%b%n#@#@#@#' \
-	--grep "^Add ChangeLog" --invert-grep ${START_TAG}..HEAD >"${TMPFILE2}"
 
 # For the summary, we want only the commit
 # subject plus any Upgrade or User notes.
@@ -55,11 +63,11 @@ EOF
 # later without having to pull them all again.
 debug "Getting issues list"
 issuelist=( $(sed -n -r -e "s/^\s*Fixes:\s*#([0-9]+)/\1/gp" "${TMPFILE2}") )
-echo "${issuelist[*]}" > "${DST_DIR}/issues_to_close.txt"
-debug "Issues found: ${#issuelist[*]}"
+rm "${DST_DIR}/issues_to_close.txt" &>/dev/null || :
 
 if [ ${#issuelist[*]} -gt 0 ] ; then
-	debug "Getting issue titles from GitHub"
+	echo "${issuelist[*]}" > "${DST_DIR}/issues_to_close.txt"
+	debug "Getting ${#issuelist[*]} issue titles from GitHub"
 	# The issues in issuelist are separated by newlines
 	# but we want them seaprated by commas for the jq query
 	# so we set IFS=, to make ${issuelist[*]} print them
@@ -75,6 +83,7 @@ if [ ${#issuelist[*]} -gt 0 ] ; then
 	# Reset IFS back to its normal special value
 	unset IFS
 else
+	touch "${DST_DIR}/issues_to_close.txt"
 	debug "No issues"
 	echo "None" >> "${TMPFILE1}"
 fi
@@ -88,7 +97,8 @@ EOF
 # git shortlog can give us a list of commit authors
 # and the number of commits in the tag range.
 debug "Getting shortlog for authors"
-git -C "${SRC_REPO}" shortlog --group="format:- %an" --format="- %s" ${START_TAG}..HEAD |\
+git -C "${SRC_REPO}" shortlog --grep "^Add ChangeLog" --invert-grep \
+	--group="format:- %an" --format="- %s" ${START_TAG}..HEAD |\
 	sed -r -e "s/^\s+/    /g" >>"${TMPFILE1}"
 
 cat <<-EOF >>"${TMPFILE1}"
