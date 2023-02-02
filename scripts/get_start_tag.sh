@@ -3,21 +3,24 @@
 set -e
 
 declare -A options=(
-	[gh_action_format]="--gh-action-format                 # Prepends the ::set-output tag"
+	[save_github_env]="--save-github-env                 # Saves start tag to 'start_tag' in the github environment"
 )
-GH_ACTION_FORMAT=false
+SAVE_GITHUB_ENV=false
 TAG_OUTPUT_PREFIX=
 
 declare needs=( end_tag )
-declare wants=( start_tag src_repo security norc gh_action_format)
+declare wants=( start_tag src_repo security norc save_github_env)
 declare tests=( src_repo )
 
 progdir="$(dirname $(realpath $0) )"
 source "${progdir}/common.sh"
 
-if ${GH_ACTION_FORMAT} ; then
-	TAG_OUTPUT_PREFIX="::set-output name=start-tag::"
-fi
+print_tag() {
+	echo $1
+	if $SAVE_GITHUB_ENV && [ -n "$GITHUB_ENV" ] && [ -f "$GITHUB_ENV" ] ; then
+		echo "start_tag=$1" >> "$GITHUB_ENV"
+	fi
+}
 
 declare -A last
 declare -A new
@@ -76,7 +79,7 @@ if [ "${new[minor]}" != "${last[minor]}" ] ; then
 		bail "(${last[tag]} -> ${new[tag]}): This seems to be a new minor
 			version but the new release type/num isn't 'rc1'."
 	fi
-	echo "${TAG_OUTPUT_PREFIX}${last[tag]}"
+	print_tag "${last[tag]}"
 	exit 0
 fi
 
@@ -114,7 +117,7 @@ if [ "${new[patch]}" != "${last[patch]}" ] ; then
 		bail "(${last[tag]} -> ${new[tag]}): This seems to be a new patch
 			version but the new release type/num isn't 'rc1'."
 	fi
-	echo "${TAG_OUTPUT_PREFIX}${last[tag]}"
+	print_tag "${last[tag]}"
 	exit 0
 fi
 
@@ -143,7 +146,7 @@ if [ "${new[release_type]}" == "rc" ] ; then
 		# it's brobably NOT branch_num - 1.
 		last_branch=$(git -C "${SRC_REPO}" for-each-ref --sort="v:refname" --format="%(refname:lstrip=3)" refs/heads/Releases/${new[certprefix]} | tail -2 | head -1)
 		lastga=$(git -C "${SRC_REPO}" tag --sort="v:refname" -l "${last_branch}.[0-9]*${new[patchsep]}[0-9]" | tail -1)
-		echo "${TAG_OUTPUT_PREFIX}$lastga"
+		print_tag "${lastga}"
 		exit 0
 	fi
 	debug "good: rcn->rcn+1"
@@ -153,7 +156,7 @@ if [ "${new[release_type]}" == "rc" ] ; then
 			${last[release_num]}. You can't skip or go back."
 	fi
 
-	echo "${TAG_OUTPUT_PREFIX}${last[tag]}"
+	print_tag "${last[tag]}"
 	exit 0
 fi
 
@@ -162,6 +165,6 @@ fi
 debug "good: rcn->ga"
 
 lastga=$(git -C "${SRC_REPO}" tag --sort="v:refname" -l "${new[major]}.[0-9]*${new[patchsep]}[0-9]" | tail -1)
-echo "${TAG_OUTPUT_PREFIX}${lastga}"
+print_tag "${lastga}"
 debug "Done"
 exit 0

@@ -18,9 +18,10 @@ $ECHO_CMD mkdir -p ../realtime/mysql || :
 for schema in config voicemail queue_log cdr ; do
 	debug "Creating mysql files for ${schema}"
 	if $DRY_RUN ; then
-		echo "alembic -c ./${schema}.ini.sample --sql upgrade head > ../realtime/mysql/mysql_${schema}.sql"
+		echo "alembic -c ./${schema}.ini.sample upgrade --sql head > ../realtime/mysql/mysql_${schema}.sql"
 	else
-		alembic -c ./${schema}.ini.sample --sql upgrade head > ../realtime/mysql/mysql_${schema}.sql
+		alembic -c ./${schema}.ini.sample upgrade --sql head \
+			2>/dev/null > ../realtime/mysql/mysql_${schema}.sql
 	fi
 done
 
@@ -31,10 +32,11 @@ $ECHO_CMD mkdir -p ../realtime/postgresql || :
 for schema in config voicemail queue_log cdr ; do
 	debug "Creating postgres files for ${schema}"
 	if $DRY_RUN ; then
-		echo "alembic -c ./${schema}.ini.sample --sql upgrade head > ../realtime/postgresql/postgresql_${schema}.sql"
+		echo "alembic -c ./${schema}.ini.sample upgrade --sql head > ../realtime/postgresql/postgresql_${schema}.sql"
 	else
 		sed -r -e "s/^#(sqlalchemy.url\s*=\s*postgresql)/\1/g" -e "s/^(sqlalchemy.url\s*=\s*mysql)/#\1/g" ./${schema}.ini.sample > /tmp/${schema}.ini.sample	
-		alembic -c /tmp/${schema}.ini.sample --sql upgrade head > ../realtime/postgresql/postgresql_${schema}.sql
+		alembic -c /tmp/${schema}.ini.sample upgrade --sql head \
+			2>/dev/null > ../realtime/postgresql/postgresql_${schema}.sql
 	fi
 done
 

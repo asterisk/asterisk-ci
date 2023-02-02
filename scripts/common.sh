@@ -28,7 +28,6 @@ progname=$(basename -s .sh $0)
 
 options+=(
 	[release_type]="--release-type=[ rc1 | rcn | ga | ganorc ]"
-	[version_type]="--version-type=[ major | minor | patch ]"
 	   [start_tag]="--start-tag=<tag>"
 	     [end_tag]="--end-tag=<tag>"
 	    [src_repo]="--src-repo=<source repository>     # defaults to current directory"
@@ -48,7 +47,7 @@ options+=(
 	[label_issues]="--label-issues    # Label related issues with release tag"
 	   [push_live]="--push-live       # Create and publish GitHub release"
 	  [full_monty]="--full-monty      # Do everything"
-	        [help]="--help"
+	        [help]="--help            # Print this help"
 	     [dry_run]="--dry-run         # Don't do anything, just print commands"
 	       [debug]="--debug           # Print debugging info"
 )
@@ -94,8 +93,8 @@ VERSION_TYPE=
 RELEASE_TYPE=
 START_TAG=
 END_TAG=
-SRC_REPO=.
-DST_DIR=../staging
+SRC_REPO=
+DST_DIR=
 BRANCH=
 NORC=false
 SECURITY=false
@@ -162,7 +161,7 @@ done
 for opt in "${tests[@]}" ; do
 	declare -n var="${opt^^}"
 	if [ -z "${var}" ] ; then
-		print_help "You must supply --${opt//_/-}"
+		continue
 	fi
 	case ${opt} in
 		src_repo)

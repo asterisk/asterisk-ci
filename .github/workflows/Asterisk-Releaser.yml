@@ -1,62 +1,88 @@
-name: Asterisk Releaser
+name: Asterisk Release
 run-name: ${{ github.actor }} is creating an Asterisk release
 on:
   workflow_dispatch:
     inputs:
-      branch:
-        description: 'Asterisk Branch to cut the release from'
+      is_certified:
+        description: 'Certified?'
+        required: true
+        type: boolean
+        default: false
+      is_security:
+        description: 'Security or Hotfix?'
+        required: true
+        type: boolean
+        default: false
+      new_version:
+        description: 'New Version (I.E. 21.4.0 or 21.4-cert2'
+        required: true
+        type: string
+      new_release_type:
+        description: 'New Release Type'
         required: true
         type: choice
         options:
-        - 20
-        - 18
-        - certified/18.9
-        - master
-      release_type:
-        description: "Next release type"
+        - 'ga'
+        - 'rc1'
+        - 'rc2'
+        - 'rc3'
+        - 'rc4'
+        - 'rc5'
+        - 'rc6'
+        - 'rc7'
+        - 'rc8'
+        - 'pre1'
+        default: ga
+      start_version:
+        description: 'Last Version (special cases only)'
+        required: false
+        type: string
+      start_release_type:
+        description: 'Last Release Type (special cases only)'
+        required: false
         type: choice
         options:
-        - 'New minor version - first RC (MINOR/RC)'
-        - 'New minor version - subsequent RC (NONE/RC)'
-        - 'New minor version - last RC -> GA (NONE/REMOVE)'
-        - 'New patch/security version - No RCs (PATCH/NONE)'
-        - 'New major version - first RC -> RC (MAJOR/RC)'
-        - 'New major version - subsequent RC (NONE/RC)'
-        - 'New major version - last RC -> GA (NONE/REMOVE)'
-      
+        - 'ga'
+        - 'rc1'
+        - 'rc2'
+        - 'rc3'
+        - 'rc4'
+        - 'rc5'
+        - 'rc6'
+        - 'rc7'
+        - 'rc8'
+        - 'pre1'
+        default: ga
+
 jobs:
-  CreateRelease:
+  TestRelease:
     runs-on: ubuntu-latest
     steps:
-      - name: Setup
+      - name: Basic Setup
         run: |
-          [[ "${{ inputs.release_type }}" =~ [^\(]+\((MAJOR|MINOR|PATCH|NONE)/(RC|REMOVE|NONE)\) ]] || {
-            echo "::error::Release type '${{ inputs.release_type }}' not valid"
-            exit 1
-          }
-          echo "version_fragment=${BASH_REMATCH[1]}" >> $GITHUB_ENV
-          echo "prerelease_fragment=${BASH_REMATCH[2]}" >> $GITHUB_ENV
-          echo "::notice::version_fragment: ${BASH_REMATCH[1]} prerelease_fragment: ${BASH_REMATCH[2]}"
+          apt update -y &>/dev/null || apt update -y 
+          apt install -y jq rsync git gh &>/dev/null || apt install -y jq rsync git gh 
           git config --global user.email "asteriskteam@digium.com"
           git config --global user.name "Asterisk Development Team"
-          last_tag=$(gh api repos/${{ vars.ASTERISK_REPO }}/git/matching-refs/tags/$BRANCH -q '.[-1].ref[10:]')
-          echo "last_tag=$last_tag" >> $GITHUB_ENV
-          last_version=$(gh api repos/${{ vars.ASTERISK_REPO }}/git/matching-refs/tags/$BRANCH -q '[ .[].ref[10:] ]| map(select(contains("rc") == false))[-1]')
-          echo "last_version=$last_version" >> $GITHUB_ENV
-          echo "::notice::Last version: $last_version  Last tag: $last_tag"
+          gh auth setup-git -h github.com
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BRANCH: ${{ inputs.branch }}
 
-      - id: bump_version 
-        name: Bump Version
-        uses: cookbenjamin/update-version@v1.0.1
+      - name: Import GPG key
+        id: import_gpg
+        uses: crazy-max/ghaction-import-gpg@v5
         with:
-          current-version: "${{ env.last_tag }}"
-          increment-version-fragment: "${{ env.version_fragment }}"
-          prerelease-fragment: "${{ env.prerelease_fragment }}"
+          gpg_private_key: ${{ secrets.ASTDEV_GPG_PRIV_KEY }}
+
+      - name: Checkout Asterisk CI (local testing)
+        if: env.ACT && env.ASTERISK_CI_URL != ''
+        run: |
+          rm -rf ./asterisk-ci/ &>/dev/null || :
+          rsync -aH ${ASTERISK_CI_URL}/. ./asterisk-ci/
+          git config --global --add safe.directory ${PWD}/asterisk-ci
 
       - name: Checkout Asterisk CI
+        if: ${{ !env.ACT }}
         uses: actions/checkout@v3
         with:
           repository: 'asterisk/asterisk-ci'
@@ -72,7 +98,64 @@ jobs:
           # Default: true
           set-safe-directory: true
 
+      - name: Assemble Version Strings
+        run: |
+          echo "::notice::${{ toJSON(inputs) }}"
+
+          SECURITY=${{ inputs.is_security }}
+          echo "SECURITY=${SECURITY}" >> $GITHUB_ENV
+          CERTIFIED=${{ inputs.is_certified }}
+          echo "CERTIFIED=${CERTIFIED}" >> $GITHUB_ENV
+          
+          if [ "${{ inputs.new_version }}" == "" ] ; then
+            echo "::error::You must supply a new version"
+            exit 1
+          fi
+
+          end_tag=""
+          ${CERTIFIED} && end_tag+="certified/"
+          end_tag+=${{ inputs.new_version }}
+          if [ "${{ inputs.new_release_type }}" != "ga" ] ; then
+            if [[ ${{ inputs.new_release_type }} =~ (rc[0-9]|pre1) ]] ; then
+              end_tag+="-${BASH_REMATCH[1]}"
+            else
+              echo "::error::Release type '${{ inputs.new_release_type }}' is malformed"
+              exit 1
+            fi
+          fi
+          echo "::notice::End tag: ${end_tag}"
+          echo "end_tag=${end_tag}" >> $GITHUB_ENV
+
+          if [ "${{ inputs.start_version }}" != "" ] ; then
+            start_tag=""
+            ${CERTIFIED} && start_tag+="certified/"
+            start_tag+=${{ inputs.start_version }}
+            [[ "${{ inputs.start_release_type }}" =~ (rc[0-9]|pre) ]] && start_tag+="-${BASH_REMATCH[1]}"
+            echo "::notice::Start tag: ${start_tag}"
+            echo "start_tag=${start_tag}" >> $GITHUB_ENV
+          fi
+
+          ./asterisk-ci/scripts/version_validator.sh \
+            $( $SECURITY && echo "--security") \
+            $( $CERTIFIED && echo "--certified") \
+            ${start_tag:+--start-tag=${start_tag}} --end-tag=${end_tag}
+
+      - name: Python and Alembic Setup
+        run: |
+          apt install -y python3.11 python3-pip &>/dev/null || apt install -y python3.11 python3-pip
+          echo "::group::Install Pip" 
+          pip install alembic &>/dev/null || pip install alembic 
+          echo "::endgroup::" 
+
+      - name: Checkout Asterisk (local testing)
+        if: env.ACT && env.ASTERISK_URL != ''
+        run: |
+          rm -rf ./asterisk &>/dev/null || :
+          rsync -aH ${ASTERISK_URL}/. ./asterisk/
+          git config --global --add safe.directory ${PWD}/asterisk
+
       - name: Checkout Asterisk
+        if: ${{ !env.ACT }}
         uses: actions/checkout@v3
         with:
           repository: 'asterisk/asterisk'
@@ -88,38 +171,40 @@ jobs:
           # Default: true
           set-safe-directory: true
 
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-
-      - name: Install Alembic
+      - name: Validate Version Strings
         run: |
-          echo "::notice::Installing Alembic"
-          pip install alembic
+          ./asterisk-ci/scripts/get_start_tag.sh \
+            --save-github-env \
+            --src-repo=./asterisk/ \
+            $( $SECURITY && echo "--security") \
+            $( $CERTIFIED && echo "--certified") \
+            ${start_tag:+--start-tag=${start_tag}} --end-tag=${end_tag}
 
-      - name: Import GPG key
-        id: import_gpg
-        uses: crazy-max/ghaction-import-gpg@v5
-        with:
-          gpg_private_key: ${{ secrets.ASTDEV_GPG_PRIV_KEY }}
-          
-      - name: Create release artifacts
+      - name: Release
         run: |
-          echo "::notice::Creating Release Artifacts"
+          echo "::notice::Start Tag: ${start_tag}"
+          echo "::notice::End Tag:   ${end_tag}"
+          dest_dir=./asterisk-${end_tag}
+          echo "::notice::PWD:     $PWD"
+          echo "::notice::DST-DIR: ${dest_dir}"
+          rm -rf ${dest_dir} &>/dev/null || :
+          mkdir ${dest_dir}
+
           ./asterisk-ci/scripts/create_release_artifacts.sh \
-            --start-tag=${last_version} --end-tag=${new_version} \
-            --src-repo=./asterisk --dst-dir=./staging \
-            --full-monty
+            --src-repo=./asterisk/ --dst-dir=${dest_dir} --debug \
+            $( $SECURITY && echo "--security") \
+            $( $CERTIFIED && echo "--certified") \
+            --start-tag=${start_tag} --end-tag=${end_tag} \
+            --cherry-pick --alembic --changelog --commit --tag \
+            --push --tarball --patchfile --sign --push-live
         env:
-          new_version: "${{ steps.bump_version.outputs.updated-version }}"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publish release
+      - name: Dump Environment
         run: |
-          echo "::notice::Publishing Release"
-          echo "TODO"
-          echo "Create GitHub Release"
-          echo "Push artifacts to final destination"
-          echo "Send notification emails"
-        env:
-          new_version: "${{ steps.bump_version.outputs.updated-version }}"
+          echo "::group::Environment"
+          echo "::debug::${{ toJSON(env) }}"
+          dir ./asterisk-${end_tag}/
+          echo "::endgroup::"
+
+
