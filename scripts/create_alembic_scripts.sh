@@ -34,6 +34,9 @@ for schema in config voicemail queue_log cdr ; do
 	if $DRY_RUN ; then
 		echo "alembic -c ./${schema}.ini.sample upgrade --sql head > ../realtime/postgresql/postgresql_${schema}.sql"
 	else
+		# We need to take the samples and copy them to a temp location
+		# replacing mysql with postgresql.  Then run alembic with the
+		# temp sample ini file.
 		sed -r -e "s/^#(sqlalchemy.url\s*=\s*postgresql)/\1/g" -e "s/^(sqlalchemy.url\s*=\s*mysql)/#\1/g" ./${schema}.ini.sample > /tmp/${schema}.ini.sample	
 		alembic -c /tmp/${schema}.ini.sample upgrade --sql head \
 			2>/dev/null > ../realtime/postgresql/postgresql_${schema}.sql

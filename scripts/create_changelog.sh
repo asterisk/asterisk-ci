@@ -2,7 +2,7 @@
 set -e
 
 declare needs=( start_tag end_tag )
-declare wants=( src_repo dst_dir )
+declare wants=( src_repo dst_dir commit )
 declare tests=( start_tag src_repo dst_dir )
 
 # Since creating the changelog doesn't make any
@@ -115,4 +115,18 @@ sed -r -e "s/^(.)/  \1/g" \
 	 sed -r -e '/#@#@#@#|@#@#@#@|Subject:/d' >> "${TMPFILE1}"
 
 cp "${TMPFILE1}" "${DST_DIR}/ChangeLog-${END_TAG}.txt"
+
+
+if ${COMMIT} ; then
+	debug "Committing ChangeLog"
+	$ECHO_CMD git -C "${SRC_REPO}" checkout ${end_tag[branch]}
+	if [ ! -d ${SRC_REPO}/ChangeLogs ] ; then
+		$ECHO_CMD mkdir -p ${SRC_REPO}/ChangeLogs
+	fi
+	$ECHO_CMD cp ${DST_DIR}/.version ${SRC_REPO}/.version
+	$ECHO_CMD cp ${DST_DIR}/ChangeLog-${END_TAG}.txt ${SRC_REPO}/ChangeLogs/
+	$ECHO_CMD git -C "${SRC_REPO}" add .version ChangeLogs/ChangeLog-${END_TAG}.txt
+	$ECHO_CMD git -C "${SRC_REPO}" commit -a -m "Add ChangeLog for release ${END_TAG}"
+fi
+
 debug "Done"

@@ -1,72 +1,74 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
 name: Asterisk Release
 run-name: ${{ github.actor }} is creating an Asterisk release
 on:
   workflow_dispatch:
     inputs:
-      is_certified:
-        description: 'Certified?'
-        required: true
-        type: boolean
-        default: false
       is_security:
         description: 'Security or Hotfix?'
         required: true
         type: boolean
         default: false
       new_version:
-        description: 'New Version (I.E. 21.4.0 or 21.4-cert2'
+        description: |
+          New Version
+          Examples:
+            21.4.0-rc1
+            21.4.0-rc2
+            21.4.0
+            21.4.1
+            certified/21.4-cert1-rc1
+            certified/21.4-cert1
         required: true
         type: string
-      new_release_type:
-        description: 'New Release Type'
-        required: true
-        type: choice
-        options:
-        - 'ga'
-        - 'rc1'
-        - 'rc2'
-        - 'rc3'
-        - 'rc4'
-        - 'rc5'
-        - 'rc6'
-        - 'rc7'
-        - 'rc8'
-        - 'pre1'
-        default: ga
       start_version:
-        description: 'Last Version (special cases only)'
+        description: |
+          Last Version
+          Only use when you KNOW that the automated
+          process won't get it right.' 
         required: false
         type: string
-      start_release_type:
-        description: 'Last Release Type (special cases only)'
-        required: false
-        type: choice
-        options:
-        - 'ga'
-        - 'rc1'
-        - 'rc2'
-        - 'rc3'
-        - 'rc4'
-        - 'rc5'
-        - 'rc6'
-        - 'rc7'
-        - 'rc8'
-        - 'pre1'
-        default: ga
 
 jobs:
-  TestRelease:
+  ReleaseAsterisk:
     runs-on: ubuntu-latest
     steps:
+      - name: Setup for local ACT
+        if: ${{ env.ACT }}
+        run: |
+          if [ -z "${ASTERISK_CI_URL}" ] || [ -z "${ASTERISK_URL}" ] ; then
+            echo "::error::ASTERISK_CI_URL and ASTERISK_URL must be set in the environment"
+            exit 1
+          fi
+          echo "::notice::Setting ASTERISK_CI_URL and ASTERISK_URL from environment"
+
+      - name: Setup for PROD
+        if: ${{ !env.ACT }}
+        run: |
+          if [ -z "${{ vars.ASTERISK_CI_URL }}" ] || [ -z "${{ vars.ASTERISK_URL }}" ] ; then
+            echo "::error::ASTERISK_CI_URL and ASTERISK_URL variables must be set for the repo."
+            exit 1
+          fi
+          echo "ASTERISK_CI_URL=${{ vars.ASTERISK_CI_URL }}" >> $GITHUB_ENV
+          echo "ASTERISK_URL=${{ vars.ASTERISK_URL }}" >> $GITHUB_ENV
+          echo "ASTERISK_MAIL_LIST_GA=${{ vars.ASTERISK_MAIL_LIST_GA }}" >> $GITHUB_ENV
+          echo "ASTERISK_MAIL_LIST_RC=${{ vars.ASTERISK_MAIL_LIST_RC }}" >> $GITHUB_ENV
+          echo "ASTERISK_MAIL_LIST_CERT_GA=${{ vars.ASTERISK_MAIL_LIST_CERT_GA }}" >> $GITHUB_ENV
+          echo "ASTERISK_MAIL_LIST_CERT_RC=${{ vars.ASTERISK_MAIL_LIST_CERT_RC }}" >> $GITHUB_ENV
+          echo "ASTERISK_MAIL_LIST_SEC=${{ vars.ASTERISK_MAIL_LIST_CERT_SEC }}" >> $GITHUB_ENV
+          echo "::notice::Setting ASTERISK_CI_URL and ASTERISK_URL from repo vars"
+
       - name: Basic Setup
         run: |
+          if [ -z "${ASTERISK_CI_URL}" ] || [ -z "${ASTERISK_URL}" ] ; then
+            echo "::error::ASTERISK_CI_URL and ASTERISK_URL must be set in the environment"
+            exit 1
+          fi
+
           apt update -y &>/dev/null || apt update -y 
           apt install -y jq rsync git gh &>/dev/null || apt install -y jq rsync git gh 
           git config --global user.email "asteriskteam@digium.com"
           git config --global user.name "Asterisk Development Team"
-          gh auth setup-git -h github.com
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Import GPG key
         id: import_gpg
@@ -74,6 +76,8 @@ jobs:
         with:
           gpg_private_key: ${{ secrets.ASTDEV_GPG_PRIV_KEY }}
 
+        # If you're testing locally, this is how the job will
+        # get the asterisk-ci repo from your dev environment.
       - name: Checkout Asterisk CI (local testing)
         if: env.ACT && env.ASTERISK_CI_URL != ''
         run: |
@@ -81,6 +85,8 @@ jobs:
           rsync -aH ${ASTERISK_CI_URL}/. ./asterisk-ci/
           git config --global --add safe.directory ${PWD}/asterisk-ci
 
+        # If running in production, we'll use the normal checkout
+        # action to get the repo.
       - name: Checkout Asterisk CI
         if: ${{ !env.ACT }}
         uses: actions/checkout@v3
@@ -98,48 +104,38 @@ jobs:
           # Default: true
           set-safe-directory: true
 
+        # This step takes the input arguments and does some
+        # basic validation.
       - name: Assemble Version Strings
         run: |
           echo "::notice::${{ toJSON(inputs) }}"
 
           SECURITY=${{ inputs.is_security }}
           echo "SECURITY=${SECURITY}" >> $GITHUB_ENV
-          CERTIFIED=${{ inputs.is_certified }}
-          echo "CERTIFIED=${CERTIFIED}" >> $GITHUB_ENV
           
           if [ "${{ inputs.new_version }}" == "" ] ; then
             echo "::error::You must supply a new version"
             exit 1
           fi
 
-          end_tag=""
-          ${CERTIFIED} && end_tag+="certified/"
-          end_tag+=${{ inputs.new_version }}
-          if [ "${{ inputs.new_release_type }}" != "ga" ] ; then
-            if [[ ${{ inputs.new_release_type }} =~ (rc[0-9]|pre1) ]] ; then
-              end_tag+="-${BASH_REMATCH[1]}"
-            else
-              echo "::error::Release type '${{ inputs.new_release_type }}' is malformed"
-              exit 1
-            fi
-          fi
-          echo "::notice::End tag: ${end_tag}"
-          echo "end_tag=${end_tag}" >> $GITHUB_ENV
+          end_tag="${{ inputs.new_version }}"
+          start_tag="${{ inputs.start_version }}"
 
-          if [ "${{ inputs.start_version }}" != "" ] ; then
-            start_tag=""
-            ${CERTIFIED} && start_tag+="certified/"
-            start_tag+=${{ inputs.start_version }}
-            [[ "${{ inputs.start_release_type }}" =~ (rc[0-9]|pre) ]] && start_tag+="-${BASH_REMATCH[1]}"
+          ./asterisk-ci/scripts/version_validator.sh \
+            $( $SECURITY && echo "--security") \
+            ${start_tag:+--start-tag=${start_tag}} --end-tag=${end_tag} \
+            --save-github-env
+
+          if [ -n "${start_tag}" ] ; then
             echo "::notice::Start tag: ${start_tag}"
             echo "start_tag=${start_tag}" >> $GITHUB_ENV
           fi
 
-          ./asterisk-ci/scripts/version_validator.sh \
-            $( $SECURITY && echo "--security") \
-            $( $CERTIFIED && echo "--certified") \
-            ${start_tag:+--start-tag=${start_tag}} --end-tag=${end_tag}
+          echo "::notice::End tag: ${end_tag}"
+          echo "end_tag=${end_tag}" >> $GITHUB_ENV
 
+        # We need python and alembic to create the alembic
+        # SQL scripts that go in the tarball.
       - name: Python and Alembic Setup
         run: |
           apt install -y python3.11 python3-pip &>/dev/null || apt install -y python3.11 python3-pip
@@ -147,6 +143,8 @@ jobs:
           pip install alembic &>/dev/null || pip install alembic 
           echo "::endgroup::" 
 
+        # If you're testing locally, this is how the job will
+        # get the asterisk repo from your dev environment.
       - name: Checkout Asterisk (local testing)
         if: env.ACT && env.ASTERISK_URL != ''
         run: |
@@ -154,11 +152,13 @@ jobs:
           rsync -aH ${ASTERISK_URL}/. ./asterisk/
           git config --global --add safe.directory ${PWD}/asterisk
 
+        # If running in production, we'll use the normal checkout
+        # action to get the repo.
       - name: Checkout Asterisk
         if: ${{ !env.ACT }}
         uses: actions/checkout@v3
         with:
-          repository: 'asterisk/asterisk'
+          repository: ${{ vars.ASTERISK_REPO }}
           ref: ${{ inputs.branch }}
           # Relative path under $GITHUB_WORKSPACE to place the repository
           path: 'asterisk'
@@ -171,40 +171,88 @@ jobs:
           # Default: true
           set-safe-directory: true
 
+        # Examine the asterisk tag history to get the
+        # proper start tag based on the end tag specified
+        # in the input form.  The start tag is saved into the
+        # environment as "start_tag".
       - name: Validate Version Strings
         run: |
           ./asterisk-ci/scripts/get_start_tag.sh \
             --save-github-env \
             --src-repo=./asterisk/ \
             $( $SECURITY && echo "--security") \
-            $( $CERTIFIED && echo "--certified") \
             ${start_tag:+--start-tag=${start_tag}} --end-tag=${end_tag}
 
+        # This is it.  Do the release.
+        # The GITHUB_TOKEN is required because we have to push
+        # commits and tags, create a release, label issues,
+        # and attach the tarball, changelog and signatures to the
+        # release.
       - name: Release
         run: |
+          source ./asterisk-ci/scripts/common.sh
+          declare -A start_tag_array
+          tag_parser ${start_tag} start_tag_array
+
+          declare -A end_tag_array
+          tag_parser ${end_tag} end_tag_array
+
           echo "::notice::Start Tag: ${start_tag}"
           echo "::notice::End Tag:   ${end_tag}"
           dest_dir=./asterisk-${end_tag}
+          echo "dest_dir=${dest_dir}" >> $GITHUB_ENV
           echo "::notice::PWD:     $PWD"
           echo "::notice::DST-DIR: ${dest_dir}"
           rm -rf ${dest_dir} &>/dev/null || :
           mkdir ${dest_dir}
 
+          # We're going to need to push commits to the public
+          # asterisk repo so we'll tell git to use the github
+          # auth mechanism so we don't need to use ssh keys.
+          gh auth setup-git -h github.com
+
           ./asterisk-ci/scripts/create_release_artifacts.sh \
             --src-repo=./asterisk/ --dst-dir=${dest_dir} --debug \
             $( $SECURITY && echo "--security") \
-            $( $CERTIFIED && echo "--certified") \
             --start-tag=${start_tag} --end-tag=${end_tag} \
             --cherry-pick --alembic --changelog --commit --tag \
             --push --tarball --patchfile --sign --push-live
+
+          # Determine the correct email list to send the announcement
+          # to (if any).
+          if ${SECURITY} ; then
+            echo "ASTERISK_MAIL_LIST=${ASTERISK_MAIL_LIST_SEC}" >> $GITHUB_ENV
+          elif [ "${end_tag_array[release_type]}" == "rc" ] ; then
+            if ${end_tag_array[certified]} ; then
+              echo "ASTERISK_MAIL_LIST=${ASTERISK_MAIL_LIST_CERT_RC}" >> $GITHUB_ENV
+            else
+              echo "ASTERISK_MAIL_LIST=${ASTERISK_MAIL_LIST_RC}" >> $GITHUB_ENV
+            fi
+          elif [ "${end_tag_array[release_type]}" == "ga" ] ; then
+            if ${end_tag_array[certified]} ; then
+              echo "ASTERISK_MAIL_LIST=${ASTERISK_MAIL_LIST_CERT_GA}" >> $GITHUB_ENV
+            else
+              echo "ASTERISK_MAIL_LIST=${ASTERISK_MAIL_LIST_GA}" >> $GITHUB_ENV
+            fi
+          else
+            echo "::notice::Not sending release announcements"
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Dump Environment
-        run: |
-          echo "::group::Environment"
-          echo "::debug::${{ toJSON(env) }}"
-          dir ./asterisk-${end_tag}/
-          echo "::endgroup::"
-
-
+      - name: Send Release Announcements
+        if: env.ASTERISK_MAIL_LIST != ''
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{secrets.MAIL_USERNAME}}
+          password: ${{secrets.MAIL_PASSWORD}}
+          subject: Asterisk Release ${{ env.end_tag }}
+          to: ${{ env.ASTERISK_MAIL_LIST }}
+          from: Asterisk Development Team <asteriskteam@digium.com>
+          html_body: "file://${{ env.dest_dir }}/ChangeLog-${{env.end_tag}}.txt"
+          reply_to: no-reply@digium.com
+          ignore_cert: true
+          convert_markdown: true

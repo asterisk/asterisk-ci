@@ -1,6 +1,11 @@
 #!/bin/bash
 set -e
 
+declare -A options=(
+	[save_github_env]="--save-github-env                 # Saves start tag to 'start_tag' in the github environment"
+)
+SAVE_GITHUB_ENV=false
+
 declare needs=( end_tag )
 declare wants=( start_tag src_repo certified security )
 declare tests=( src_repo )
@@ -25,6 +30,7 @@ fi
 
 $progdir/get_start_tag.sh ${START_TAG:+--start-tag=${START_TAG}} \
 	--end-tag=${END_TAG} --src-repo="${SRC_REPO}" \
-	$(booloption SECURITY) $(booloption CERTIFIED)
+	$(booloption SECURITY) $(booloption CERTIFIED) \
+	$(booloption SAVE_GITHUB_ENV)
 
 exit 0

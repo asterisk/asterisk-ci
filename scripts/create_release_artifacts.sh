@@ -53,19 +53,7 @@ if ${CHANGELOG} ; then
 	echo "${END_TAG}" > ${DST_DIR}/.version
 	$ECHO_CMD $progdir/create_changelog.sh --start-tag=${START_TAG} \
 		 --end-tag=${END_TAG} --src-repo="${SRC_REPO}" --dst-dir="${DST_DIR}" \
-		  $(booloption debug)
-
-	if ${COMMIT} ; then
-		debug "Committing ChangeLog"
-		$ECHO_CMD git -C "${SRC_REPO}" checkout ${end_tag[branch]}
-		if [ ! -d ${SRC_REPO}/ChangeLogs ] ; then
-			$ECHO_CMD mkdir -p ${SRC_REPO}/ChangeLogs
-		fi
-		$ECHO_CMD cp ${DST_DIR}/.version ${SRC_REPO}/.version
-		$ECHO_CMD cp ${DST_DIR}/ChangeLog-${END_TAG}.txt ${SRC_REPO}/ChangeLogs/
-		$ECHO_CMD git -C "${SRC_REPO}" add .version ChangeLogs/ChangeLog-${END_TAG}.txt
-		$ECHO_CMD git -C "${SRC_REPO}" commit -a -m "Add ChangeLog for release ${END_TAG}"
-	fi
+		$(booloption commit) $(booloption debug)
 fi
 
 if ${TAG} ; then
@@ -99,7 +87,7 @@ if ${PUSH} ; then
 fi
 
 if ${LABEL_ISSUES} ; then
-	debug "Labelling close issues for ${END_TAG}"
+	debug "Labelling closed issues for ${END_TAG}"
 	$ECHO_CMD $progdir/label_issues.sh \
 		--start-tag=${START_TAG} --end-tag=${END_TAG} \
 		--src-repo="${SRC_REPO}" --dst-dir="${DST_DIR}" \
