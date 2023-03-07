@@ -1,0 +1,9 @@
+name: PullRequestOpenedOrUpdated
+run-name: ${{ github.actor }} has submitted a pull request
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+jobs:
+  UnitTests:
+    uses: ./.github/workflows/RunUnitTests.yml

@@ -1,0 +1,84 @@
+name: RunUnitTests
+run-name: ${{ github.actor }} has triggered a run of Asterisk Unit Tests
+on:
+  workflow_call:
+#  pull_request:
+#    types: [opened, reopened]
+env:
+  UNITTEST_COMMAND: "test execute category /main/json/"
+
+jobs:
+  AsteriskUnitTests:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/asterisk/asteriskci-agent-rocky8:latest
+
+    steps:
+
+      - name: Checkout Asterisk
+        uses: actions/checkout@v3
+        with:
+          path: 'asterisk'
+          clean: true
+          fetch-depth: 1
+          set-safe-directory: true
+
+      - name: Setup Asterisk Build Environment
+        run: |
+          cd asterisk
+          echo "::notice::PWD: $PWD"
+          echo "::notice::$(git log -5 --format='%h %an %ai %s')"
+          mkdir -p /srv/cache/externals /srv/cache/sounds /srv/cache/ccache || :
+          chown -R asteriskci:users /srv/cache
+          chmod g+rw /srv/cache/ccache
+          chmod g+s /srv/cache/ccache
+          mkdir -p tests/CI/output || :
+          chown -R asteriskci:users tests/CI/output
+
+      - name: Build Asterisk
+        run: |
+          cd asterisk
+          if [ -f ./tests/CI/output/is-built ] ; then
+            echo "Asterisk is already built"
+            exit 0
+          fi
+          ./tests/CI/buildAsterisk.sh --github --branch-name=master --output-dir=./tests/CI/output
+          touch ./tests/CI/output/is-built
+
+      - name: Install Asterisk
+        if: ${{ success() }}
+        run: |
+          cd asterisk
+          if [ -f ./tests/CI/output/is-installed ] ; then
+            echo "Asterisk is already installed"
+            exit 0
+          fi
+          ./tests/CI/installAsterisk.sh --github --uninstall-all --branch-name=master --user-group=asteriskci:users 
+          touch ./tests/CI/output/is-installed
+
+      - name: Run Unit Tests
+        if: ${{ success() }}
+        run: |
+          cd asterisk
+          echo "::notice::Running unit test command $UNITTEST_COMMAND"
+          tests/CI/runUnittests.sh --no-expect --github \
+            --user-group=asteriskci:users \
+            --output-dir=./tests/CI/output \
+            --output-xml=./tests/CI/output/unittests-results.xml \
+            --unittest-command="$UNITTEST_COMMAND"
+
+      - name: Save Output
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: Test Results
+          path: asterisk/tests/CI/output
+
+      # We need to save the event payload to the artifacts so
+      # the publish test results workflow knows which PR to put the
+      # results
+      - name: Save Event Payload
+        uses: actions/upload-artifact@v3
+        with:
+          name: Event File
+          path: ${{ github.event_path }}

@@ -1,0 +1,12 @@
+name: PullRequestComment
+run-name: ${{ github.actor }} has added a PR comment
+# PR comments are reported via issue_comments
+on: [repository_dispatch]
+
+jobs:
+  CheckForKeywords:
+  # Only run if the comment was on a PR
+    runs-on: ubuntu-latest
+    steps:
+      - name: DumpEnvironment
+        uses: asterisk/DumpEnvironmentAction@v1.0.0
