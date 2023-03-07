@@ -2,8 +2,17 @@ name: RunUnitTests
 run-name: ${{ github.actor }} has triggered a run of Asterisk Unit Tests
 on:
   workflow_call:
-#  pull_request:
-#    types: [opened, reopened]
+    inputs:
+      pr-number:
+        required: true
+        type: number
+      repo:
+        required: true
+        type: string
+      ref:
+        required: true
+        type: string
+
 env:
   UNITTEST_COMMAND: "test execute category /main/json/"
 
@@ -14,11 +23,19 @@ jobs:
       image: ghcr.io/asterisk/asteriskci-agent-rocky8:latest
 
     steps:
+      - name: Setup Environment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api repos/asterisk/asterisk-gh-test/pulls/${{inputs.pr-number}} > pr.json
+          gh api repos/asterisk/asterisk-gh-test/pulls/${{inputs.pr-number}}/commits > commits.json
+          echo "GITHUB_SHA=$(jq '.merge_commit_sha' pr.json)" >> $GITHUB_ENV
 
       - name: Checkout Asterisk
         uses: actions/checkout@v3
         with:
-          path: 'asterisk'
+          repository: ${{ inputs.repo }}
+          ref: ${{ inputs.ref }}
           clean: true
           fetch-depth: 1
           set-safe-directory: true
@@ -77,8 +94,15 @@ jobs:
       # We need to save the event payload to the artifacts so
       # the publish test results workflow knows which PR to put the
       # results
-      - name: Save Event Payload
-        uses: actions/upload-artifact@v3
+#      - name: Save Event Payload
+#        uses: actions/upload-artifact@v3
+#        with:
+#          name: Event File
+#          path: ${{ github.event_path }}
+
+      - name: Publish Test Results
+        uses: EnricoMi/publish-unit-test-result-action@v2
         with:
-          name: Event File
-          path: ${{ github.event_path }}
+          commit: ${{ env.GITHUB_SHA }}
+          files: "tests/CI/output/*.xml"
+          

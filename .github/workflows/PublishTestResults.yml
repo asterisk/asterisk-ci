@@ -1,10 +1,11 @@
 name: PublishTestResults
 
 on:
-  workflow_run:
-    workflows: [PullRequestOpenedOrUpdated,RunUnitTests,RunGateTests]
-    types:
-      - completed
+  workflow_dispatch:
+#  workflow_run:
+#    workflows: [PullRequestOpenedOrUpdated,RunUnitTests,RunGateTests]
+#    types:
+#      - completed
 
 permissions: {}
 

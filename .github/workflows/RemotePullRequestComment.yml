@@ -36,22 +36,9 @@ jobs:
   UnitTests:
     needs: CheckForKeywords
     if: endsWith(needs.CheckForKeywords.outputs.keyword, 'check')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Asterisk
-        uses: actions/checkout@v3
-        with:
-          repository: asterisk/asterisk-gh-test
-          ref: refs/pull/${{ github.event.client_payload.issue.number }}/head
-          clean: true
-          fetch-depth: 1
-          set-safe-directory: true
-    
-      - name: Will Run Unit tests
-        run: |
-          echo "PWD: $PWD"
-          ls -al
-          find -name testfile.txt
-          echo "::notice::${{needs.CheckForKeywords.outputs.keyword}}"
-          echo "::notice::Yes Will Run Unit tests"
-          
+    uses: ./.github/workflows/RunUnitTests.yml
+    with:
+      pr-number: ${{ github.event.client_payload.issue.number }}
+      repo: ${{ github.event.client_payload.repository.full_name }}
+      ref: refs/pull/${{ github.event.client_payload.issue.number }}/head
+
