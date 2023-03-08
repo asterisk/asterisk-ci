@@ -56,9 +56,6 @@ jobs:
 
       - name: Setup Asterisk Build Environment
         run: |
-          echo "::notice::GITHUB_REPOSITORY: $GITHUB_REPOSITORY"
-          echo "::notice::env.GITHUB_REPOSITORY: ${{env.GITHUB_REPOSITORY}}"
-          
           echo $PWD
           ls -al
           cd $REPO_DIR
@@ -153,7 +150,7 @@ jobs:
         uses: /asterisk/asterisk-ci-actions/publish-unit-test-result-action/composite@main
         with:
           github_token: ${{ steps.get_workflow_token.outputs.token }}
-#          event_file: pr_event.json
-          commit: ${{ env.PR_SHA }}
-          repository: ${{ env.PR_REPO }}
+          event_file: pr_event.json
+#          commit: ${{ env.PR_SHA }}
+#          repository: ${{ env.PR_REPO }}
           files: ${{env.REPO_DIR}}/tests/CI/output/*.xml
