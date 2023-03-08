@@ -1,5 +1,5 @@
 name: PullRequestComment
-run-name: ${{ github.actor }} has added a PR comment
+run-name: ${{ github.event.client_payload.sender.login }} has added a PR comment
 # PR comments are reported via issue_comments
 on:
   repository_dispatch:
@@ -17,7 +17,7 @@ jobs:
       keyword: ${{ steps.parse.outputs.keyword }}
     steps:
       - name: DumpEnvironment
-        uses: asterisk/DumpEnvironmentAction@v1.0.0
+        uses: /asterisk/asterisk-ci-actions/DumpEnvironmentAction@main
 
       - name: ParseComment
         id: parse
@@ -39,6 +39,6 @@ jobs:
     uses: ./.github/workflows/RunUnitTests.yml
     with:
       pr-number: ${{ github.event.client_payload.issue.number }}
-      repo: ${{ github.event.client_payload.repository.full_name }}
-      ref: refs/pull/${{ github.event.client_payload.issue.number }}/head
+      pr-repo: ${{ github.event.client_payload.repository.full_name }}
+    secrets: inherit
 
