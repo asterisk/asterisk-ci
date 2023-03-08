@@ -27,9 +27,15 @@ jq '.event.client_payload' $GITHUB_EVENT_PATH > pr_event.json
 echo "::group::pr.json"
 cat pr.json
 echo "::endgroup::"
+
 echo "::group::commits.json"
 cat commits.json
 echo "::endgroup::"
+
+echo "::group::gh_event.json"
+jq . $GITHUB_EVENT_PATH
+echo "::endgroup::"
+
 echo "::group::pr_event.json"
 cat pr_event.json
 echo "::endgroup::"

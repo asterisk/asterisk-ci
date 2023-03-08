@@ -150,7 +150,7 @@ jobs:
         uses: /asterisk/asterisk-ci-actions/publish-unit-test-result-action/composite@main
         with:
           github_token: ${{ steps.get_workflow_token.outputs.token }}
-          event_file: pr_event.json
-#          commit: ${{ env.PR_SHA }}
-#          repository: ${{ env.PR_REPO }}
+#          event_file: pr_event.json
+          commit: ${{ env.PR_SHA }}
+          repository: ${{ env.PR_REPO }}
           files: ${{env.REPO_DIR}}/tests/CI/output/*.xml
