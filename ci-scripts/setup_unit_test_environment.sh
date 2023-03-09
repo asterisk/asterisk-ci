@@ -22,7 +22,7 @@ echo "GITHUB_REPOSITORY=$PR_REPO" >> $GITHUB_ENV
 echo "REPO_DIR=$REPO_DIR" >> $GITHUB_ENV
 echo "PR_SHA=$PR_SHA" >> $GITHUB_ENV
 
-jq '.event.client_payload' $GITHUB_EVENT_PATH > pr_event.json
+jq '.client_payload' $GITHUB_EVENT_PATH > pr_event.json
 
 echo "::group::pr.json"
 cat pr.json
