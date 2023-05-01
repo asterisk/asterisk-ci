@@ -144,7 +144,7 @@ if [ "${new[release_type]}" == "rc" ] ; then
 		fi
 		# We need to get the last branch.  In the case of certified,
 		# it's brobably NOT branch_num - 1.
-		last_branch=$(git -C "${SRC_REPO}" for-each-ref --sort="v:refname" --format="%(refname:lstrip=3)" refs/heads/Releases/${new[certprefix]} | tail -2 | head -1)
+		last_branch=$(git -C "${SRC_REPO}" for-each-ref --sort="v:refname" --format="%(refname:lstrip=3)" refs/heads/releases/${new[certprefix]} | tail -2 | head -1)
 		lastga=$(git -C "${SRC_REPO}" tag --sort="v:refname" -l "${last_branch}.[0-9]*${new[patchsep]}[0-9]" | tail -1)
 		print_tag "${lastga}"
 		exit 0

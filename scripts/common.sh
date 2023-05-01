@@ -222,7 +222,7 @@ tag_parser() {
 	else
 		return 1
 	fi
-	tagarray[branch]="Releases/${tagarray[certprefix]}${tagarray[major]}"
+	tagarray[branch]="releases/${tagarray[certprefix]}${tagarray[major]}"
 	tagarray[source_branch]="${tagarray[certprefix]}${tagarray[major]}"
 	${tagarray[certified]} && tagarray[startpatch]=1 || tagarray[startpatch]=0
 	tagarray[tag]=$tagin
