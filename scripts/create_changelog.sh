@@ -62,7 +62,7 @@ EOF
 # save them to 'issues_to_close.txt' so we can close them
 # later without having to pull them all again.
 debug "Getting issues list"
-issuelist=( $(sed -n -r -e "s/^\s*Fixes:\s*#([0-9]+)/\1/gp" "${TMPFILE2}") )
+issuelist=( $(sed -n -r -e "s/^\s*(Fixes|Resolves):\s*#([0-9]+)/\1/gp" "${TMPFILE2}") )
 rm "${DST_DIR}/issues_to_close.txt" &>/dev/null || :
 
 if [ ${#issuelist[*]} -gt 0 ] ; then
