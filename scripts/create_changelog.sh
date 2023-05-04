@@ -14,7 +14,7 @@ source "${progdir}/common.sh"
 mkdir -p /tmp/asterisk
 TMPFILE1=/tmp/asterisk/ChangeLog-${END_TAG}.tmp1.txt
 TMPFILE2=/tmp/asterisk/ChangeLog-${END_TAG}.tmp2.txt
-trap "rm -f $TMPFILE1 $TMPFILE2" EXIT
+#trap "rm -f $TMPFILE1 $TMPFILE2" EXIT
 
 
 # This gets a somewhat machine readable list of commits
@@ -47,7 +47,7 @@ EOF
 debug "Creating summary"
 sed -r -e '/^$/d' "${TMPFILE2}" |\
 	sed -n -r -e "s/^Subject:\s+(.+)/- \1/p" \
-	-e '/^(Upgrade|User)Note:/,/((Upgrade|User)Note:)||(^[-])/!d ; s/(.)/    \1/p' \
+	-e '/^(Upgrade|User)Note:/,/((Upgrade|User)Note:)|\(cherry|#@#@#@#|(^[-])/!d ; /\(cherry/d ; s/(.)/    \1/p' \
 		>>"${TMPFILE1}"
 
 cat <<-EOF >>"${TMPFILE1}"
@@ -62,7 +62,7 @@ EOF
 # save them to 'issues_to_close.txt' so we can close them
 # later without having to pull them all again.
 debug "Getting issues list"
-issuelist=( $(sed -n -r -e "s/^\s*(Fixes|Resolves):\s*#([0-9]+)/\1/gp" "${TMPFILE2}") )
+issuelist=( $(sed -n -r -e "s/^\s*(Fixes|Resolves):\s*#([0-9]+)/\2/gp" "${TMPFILE2}") )
 rm "${DST_DIR}/issues_to_close.txt" &>/dev/null || :
 
 if [ ${#issuelist[*]} -gt 0 ] ; then
@@ -76,7 +76,7 @@ if [ ${#issuelist[*]} -gt 0 ] ; then
 	# We want the issue number and the title formatted like:
 	#   - #2: Issue Title
 	# which GitHub can do for us using a jq format string.
-	gh --repo=asterisk/$(basename ${SRC_REPO}) issue list \
+	gh --repo=asterisk/$(basename ${SRC_REPO}) issue list --state all \
 		--json number,title \
 		--jq "[ .[] | select(.number|IN(${issuelist[*]}))] | sort_by(.number) | .[] | \"  - #\" + ( .number | tostring) + \": \" + .title" \
 		>>"${TMPFILE1}"
@@ -112,7 +112,7 @@ debug "Adding the details"
 sed -r -e "s/^(.)/  \1/g" \
 	-e '/@#@#@#@/,/Subject:/p ; s/^  Subject:\s+([^ ].+)/- \1/g' \
 	"${TMPFILE2}" |\
-	 sed -r -e '/#@#@#@#|@#@#@#@|Subject:/d' >> "${TMPFILE1}"
+	 sed -r -e '/\(cherry picked|Change-Id|#@#@#@#|@#@#@#@|Subject:/d' >> "${TMPFILE1}"
 
 cp "${TMPFILE1}" "${DST_DIR}/ChangeLog-${END_TAG}.txt"
 

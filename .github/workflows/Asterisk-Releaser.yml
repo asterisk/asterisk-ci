@@ -33,40 +33,18 @@ jobs:
   ReleaseAsterisk:
     runs-on: ubuntu-latest
     steps:
-      - name: Setup for local ACT
-        if: ${{ env.ACT }}
-        run: |
-          if [ -z "${ASTERISK_CI_URL}" ] || [ -z "${ASTERISK_URL}" ] ; then
-            echo "::error::ASTERISK_CI_URL and ASTERISK_URL must be set in the environment"
-            exit 1
-          fi
-          echo "::notice::Setting ASTERISK_CI_URL and ASTERISK_URL from environment"
-
       - name: Setup for PROD
-        if: ${{ !env.ACT }}
         run: |
-          if [ -z "${{ vars.ASTERISK_CI_URL }}" ] || [ -z "${{ vars.ASTERISK_URL }}" ] ; then
-            echo "::error::ASTERISK_CI_URL and ASTERISK_URL variables must be set for the repo."
-            exit 1
-          fi
-          echo "ASTERISK_CI_URL=${{ vars.ASTERISK_CI_URL }}" >> $GITHUB_ENV
-          echo "ASTERISK_URL=${{ vars.ASTERISK_URL }}" >> $GITHUB_ENV
           echo "ASTERISK_MAIL_LIST_GA=${{ vars.ASTERISK_MAIL_LIST_GA }}" >> $GITHUB_ENV
           echo "ASTERISK_MAIL_LIST_RC=${{ vars.ASTERISK_MAIL_LIST_RC }}" >> $GITHUB_ENV
           echo "ASTERISK_MAIL_LIST_CERT_GA=${{ vars.ASTERISK_MAIL_LIST_CERT_GA }}" >> $GITHUB_ENV
           echo "ASTERISK_MAIL_LIST_CERT_RC=${{ vars.ASTERISK_MAIL_LIST_CERT_RC }}" >> $GITHUB_ENV
           echo "ASTERISK_MAIL_LIST_SEC=${{ vars.ASTERISK_MAIL_LIST_CERT_SEC }}" >> $GITHUB_ENV
-          echo "::notice::Setting ASTERISK_CI_URL and ASTERISK_URL from repo vars"
 
       - name: Basic Setup
         run: |
-          if [ -z "${ASTERISK_CI_URL}" ] || [ -z "${ASTERISK_URL}" ] ; then
-            echo "::error::ASTERISK_CI_URL and ASTERISK_URL must be set in the environment"
-            exit 1
-          fi
-
-          apt update -y &>/dev/null || apt update -y 
-          apt install -y jq rsync git gh &>/dev/null || apt install -y jq rsync git gh 
+          sudo apt update -y &>/dev/null || apt update -y 
+          sudo apt install -y jq rsync git gh &>/dev/null || apt install -y jq rsync git gh 
           git config --global user.email "asteriskteam@digium.com"
           git config --global user.name "Asterisk Development Team"
 
@@ -76,19 +54,7 @@ jobs:
         with:
           gpg_private_key: ${{ secrets.ASTDEV_GPG_PRIV_KEY }}
 
-        # If you're testing locally, this is how the job will
-        # get the asterisk-ci repo from your dev environment.
-      - name: Checkout Asterisk CI (local testing)
-        if: env.ACT && env.ASTERISK_CI_URL != ''
-        run: |
-          rm -rf ./asterisk-ci/ &>/dev/null || :
-          rsync -aH ${ASTERISK_CI_URL}/. ./asterisk-ci/
-          git config --global --add safe.directory ${PWD}/asterisk-ci
-
-        # If running in production, we'll use the normal checkout
-        # action to get the repo.
       - name: Checkout Asterisk CI
-        if: ${{ !env.ACT }}
         uses: actions/checkout@v3
         with:
           repository: 'asterisk/asterisk-ci'
@@ -138,28 +104,15 @@ jobs:
         # SQL scripts that go in the tarball.
       - name: Python and Alembic Setup
         run: |
-          apt install -y python3.11 python3-pip &>/dev/null || apt install -y python3.11 python3-pip
+          sudo apt install -y python3.11 python3-pip &>/dev/null || apt install -y python3.11 python3-pip
           echo "::group::Install Pip" 
-          pip install alembic &>/dev/null || pip install alembic 
+          sudo pip install alembic &>/dev/null || pip install alembic 
           echo "::endgroup::" 
 
-        # If you're testing locally, this is how the job will
-        # get the asterisk repo from your dev environment.
-      - name: Checkout Asterisk (local testing)
-        if: env.ACT && env.ASTERISK_URL != ''
-        run: |
-          rm -rf ./asterisk &>/dev/null || :
-          rsync -aH ${ASTERISK_URL}/. ./asterisk/
-          git config --global --add safe.directory ${PWD}/asterisk
-
-        # If running in production, we'll use the normal checkout
-        # action to get the repo.
       - name: Checkout Asterisk
-        if: ${{ !env.ACT }}
         uses: actions/checkout@v3
         with:
           repository: ${{ vars.ASTERISK_REPO }}
-          ref: ${{ inputs.branch }}
           # Relative path under $GITHUB_WORKSPACE to place the repository
           path: 'asterisk'
           # Whether to execute `git clean -ffdx && git reset --hard HEAD` before fetching
@@ -177,11 +130,20 @@ jobs:
         # environment as "start_tag".
       - name: Validate Version Strings
         run: |
+          git -C ./asterisk/ fetch
           ./asterisk-ci/scripts/get_start_tag.sh \
-            --save-github-env \
+            --save-github-env --debug \
             --src-repo=./asterisk/ \
             $( $SECURITY && echo "--security") \
             ${start_tag:+--start-tag=${start_tag}} --end-tag=${end_tag}
+
+      - name: Get Token needed to add reviewers
+        id: get_workflow_token
+        uses: peter-murray/workflow-application-token-action@v1
+        with:
+          application_id: ${{secrets.ASTERISK_ORG_ACCESS_APP_ID}}
+          application_private_key: ${{secrets.ASTERISK_ORG_ACCESS_APP_PRIV_KEY}}
+          organization: asterisk
 
         # This is it.  Do the release.
         # The GITHUB_TOKEN is required because we have to push
@@ -189,13 +151,29 @@ jobs:
         # and attach the tarball, changelog and signatures to the
         # release.
       - name: Release
+        env:
+          GITHUB_TOKEN: ${{steps.get_workflow_token.outputs.token}}
+          GH_TOKEN: ${{steps.get_workflow_token.outputs.token}}
         run: |
           source ./asterisk-ci/scripts/common.sh
+
           declare -A start_tag_array
           tag_parser ${start_tag} start_tag_array
+          declare -p start_tag_array
 
           declare -A end_tag_array
           tag_parser ${end_tag} end_tag_array
+          declare -p end_tag_array
+
+          export GH_TOKEN
+          export GITHUB_TOKEN
+
+          gh auth setup-git -h github.com
+          SRC_REPO=./asterisk/
+          git -C "${SRC_REPO}" checkout ${end_tag_array[source_branch]}
+          git -C "${SRC_REPO}" pull
+          git -C "${SRC_REPO}" checkout ${end_tag_array[branch]}
+          git -C "${SRC_REPO}" pull
 
           echo "::notice::Start Tag: ${start_tag}"
           echo "::notice::End Tag:   ${end_tag}"
@@ -209,14 +187,13 @@ jobs:
           # We're going to need to push commits to the public
           # asterisk repo so we'll tell git to use the github
           # auth mechanism so we don't need to use ssh keys.
-          gh auth setup-git -h github.com
 
           ./asterisk-ci/scripts/create_release_artifacts.sh \
             --src-repo=./asterisk/ --dst-dir=${dest_dir} --debug \
             $( $SECURITY && echo "--security") \
             --start-tag=${start_tag} --end-tag=${end_tag} \
             --cherry-pick --alembic --changelog --commit --tag \
-            --push --tarball --patchfile --sign --push-live
+            --tarball --patchfile --sign
 
           # Determine the correct email list to send the announcement
           # to (if any).
@@ -237,8 +214,6 @@ jobs:
           else
             echo "::notice::Not sending release announcements"
           fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Send Release Announcements
         if: env.ASTERISK_MAIL_LIST != ''
@@ -247,12 +222,12 @@ jobs:
           server_address: smtp.gmail.com
           server_port: 465
           secure: true
-          username: ${{secrets.MAIL_USERNAME}}
-          password: ${{secrets.MAIL_PASSWORD}}
+          username: ${{secrets.ASTERISKTEAMSA_GMAIL_ACCT}}
+          password: ${{secrets.ASTERISKTEAMSA_GMAIL_TOKEN}}
           subject: Asterisk Release ${{ env.end_tag }}
           to: ${{ env.ASTERISK_MAIL_LIST }}
           from: Asterisk Development Team <asteriskteam@digium.com>
-          html_body: "file://${{ env.dest_dir }}/ChangeLog-${{env.end_tag}}.txt"
+          body: "file://${{ env.dest_dir }}/ChangeLog-${{env.end_tag}}.txt"
           reply_to: no-reply@digium.com
           ignore_cert: true
-          convert_markdown: true
+          convert_markdown: false

@@ -27,11 +27,17 @@ declare -A new
 
 tag_parser ${END_TAG} new || bail "Unable to parse end tag '${END_TAG}'"
 ${DEBUG} && declare -p new
+debug "Checking out ${new[branch]}"
+cd "${SRC_REPO}"
+git remote -v
+
+git checkout ${new[branch]}
 
 if [ -z "${START_TAG}" ] ; then
 	START_TAG=$(git -C "${SRC_REPO}" describe --abbrev=0 "${new[branch]}")
 fi
 
+debug "Parsing start tag ${START_TAG}"
 tag_parser ${START_TAG} last || bail "Unable to parse start tag '${START_TAG}'"
 ${DEBUG} && declare -p last
 
