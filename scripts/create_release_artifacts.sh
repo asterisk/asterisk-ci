@@ -99,7 +99,7 @@ if ${PUSH_LIVE} ; then
 	cd "${SRC_REPO}"
 	$ECHO_CMD gh release create ${END_TAG} \
 		$( [ "${end_tag[release_type]}" != "ga" ] && echo "--prerelease" ) \
-		--notes-file ${DST_DIR}/ChangeLog-${END_TAG}.txt \
+		--notes-file ${DST_DIR}/ChangeLog-${END_TAG}.md \
 		--target ${end_tag[branch]} -t "Asterisk Release ${END_TAG}" \
 		${DST_DIR}/asterisk-${END_TAG}.*	
 fi
